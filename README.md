@@ -107,6 +107,49 @@ cargo build --release
 
 The binary will be located at `./target/release/sshs` once the build is complete.
 
+## Custom commands with templates
+
+By default, selecting a host runs `ssh "{{{name}}}"`. The `--template` option replaces that command with your own [Handlebars](https://handlebarsjs.com/guide/) template, so sshs can launch any tool from the same host list.
+
+These variables are available:
+
+| Variable        | Value                                                    |
+| --------------- | -------------------------------------------------------- |
+| `name`          | First pattern of the `Host` line                         |
+| `aliases`       | Other patterns of the `Host` line, joined with `, `      |
+| `destination`   | `HostName`, or the host name when `HostName` is not set  |
+| `user`          | `User`, empty when not set                               |
+| `port`          | `Port`, empty when not set                               |
+| `proxy_command` | `ProxyCommand`, empty when not set                       |
+
+Use triple braces (`{{{name}}}`) so that values are not HTML-escaped, and `{{#if ...}}` for optional values. The rendered command is split like a shell would split it, then run directly, **without a shell**: quotes work, but pipes, `&&`, `$VAR` or `~` do not. Wrap the command in `sh -c '...'` if you need them.
+
+`--on-session-start-template` and `--on-session-end-template` take the same variables and run before and after the main command.
+
+### Examples
+
+Mount a host with [SSHFS](https://github.com/libfuse/sshfs):
+
+```bash
+sshs --template 'sshfs "{{{name}}}":/path/to/remote /path/to/local'
+```
+
+Open a Remote Desktop (RDP) session with [FreeRDP](https://www.freerdp.com/), from a separate file of Windows hosts. sshs only reads the file to build the list, so it can use any extension and stay out of `~/.ssh/config`:
+
+```nginx
+# ~/.config/rdp-hosts
+Host windows-server
+  HostName 192.0.2.10
+  User administrator@example.local
+```
+
+```bash
+sshs --config ~/.config/rdp-hosts \
+  --template 'xfreerdp3 /v:{{{destination}}}{{#if port}}:{{{port}}}{{/if}}{{#if user}} "/u:{{{user}}}"{{/if}} /dynamic-resolution +clipboard'
+```
+
+FreeRDP asks for the password when connecting. On Wayland, `sdl-freerdp3` takes the same options.
+
 ## Troubleshooting
 
 ### [...]/.ssh/config: no such file or directory
